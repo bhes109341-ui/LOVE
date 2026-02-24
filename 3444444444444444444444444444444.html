@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>碧華國小 - 深夜怪談</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.js"></script>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #050505;
+            color: #e0e0e0;
+            font-family: "Microsoft JhengHei", "PingFang TC", sans-serif;
+            overflow: hidden; /* 隱藏捲軸 */
+        }
+
+        /* p5.js 畫布設為背景 */
+        #defaultCanvas0 {
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 0;
+        }
+
+        /* 遊戲 UI 容器 */
+        #game-container {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 80%;
+            max-width: 800px;
+            background: rgba(0, 0, 0, 0.75);
+            padding: 30px;
+            border: 1px solid #333;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0, 255, 100, 0.1);
+            z-index: 10;
+            display: none; /* 初始隱藏，等待點擊開始 */
+            text-align: center;
+        }
+
+        #story-text {
+            font-size: 1.5rem;
+            line-height: 1.6;
+            margin-bottom: 30px;
+            text-shadow: 0 0 5px #000;
+        }
+
+        .choice-btn {
+            display: block;
+            width: 80%;
+            margin: 10px auto;
+            padding: 15px;
+            background: transparent;
+            color: #88ff88;
+            border: 1px solid #88ff88;
+            border-radius: 5px;
+            font-size: 1.2rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-family: inherit;
+        }
+
+        .choice-btn:hover {
+            background: rgba(136, 255, 136, 0.2);
+            box-shadow: 0 0 10px rgba(136, 255, 136, 0.5);
+        }
+
+        /* TTS 控制區 */
+        #tts-controls {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 20;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 10px 15px;
+            border: 1px solid #444;
+            border-radius: 5px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            display: none;
+        }
+
+        #start-screen {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: rgba(0,0,0,0.9);
+            z-index: 100;
+        }
+
+        #start-btn {
+            padding: 20px 40px;
+            font-size: 2rem;
+            background: #222;
+            color: red;
+            border: 2px solid red;
+            cursor: pointer;
+            border-radius: 10px;
+            transition: 0.3s;
+        }
+
+        #start-btn:hover {
+            background: red;
+            color: black;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="start-screen">
+        <button id="start-btn">點擊進入深夜的碧華國小</button>
+    </div>
+
+    <div id="tts-controls">
+        <label for="speed-slider">旁白語速:</label>
+        <input type="range" id="speed-slider" min="0.5" max="2" step="0.1" value="1">
+        <span id="speed-value">1.0x</span>
+    </div>
+
+    <div id="game-container">
+        <div id="story-text">載入中...</div>
+        <div id="choices-container"></div>
+    </div>
+
+    <script>
+        /* =========================================
+           1. p5.js 互動粒子背景 (1000顆)
+           ========================================= */
+        let particles = [];
+        const particleCount = 1000;
+
+        function setup() {
+            let canvas = createCanvas(windowWidth, windowHeight);
+            canvas.style('display', 'block');
+            
+            // 初始化超多粒子
+            for (let i = 0; i < particleCount; i++) {
+                particles.push(new Particle());
+            }
+        }
+
+        function draw() {
+            // 半透明背景，製造殘影效果
+            background(5, 5, 8, 40);
+
+            for (let p of particles) {
+                p.interact();
+                p.update();
+                p.display();
+            }
+        }
+
+        function windowResized() {
+            resizeCanvas(windowWidth, windowHeight);
+        }
+
+        class Particle {
+            constructor() {
+                this.pos = createVector(random(width), random(height));
+                this.vel = createVector(random(-1, 1), random(-1, 1));
+                this.acc = createVector();
+                this.size = random(1.5, 3.5);
+                // 幽綠色/冷藍色調
+                this.color = color(random(50, 100), random(150, 255), random(150, 255), 150);
+            }
+
+            interact() {
+                let mouse = createVector(mouseX, mouseY);
+                let dir = p5.Vector.sub(this.pos, mouse);
+                let d = dir.mag();
+
+                // 如果滑鼠靠近，粒子會被強烈推開
+                if (d < 150) {
+                    dir.normalize();
+                    let force = map(d, 0, 150, 5, 0);
+                    dir.mult(force);
+                    this.acc.add(dir);
+                }
+            }
+
+            update() {
+                // 輕微的隨機飄動
+                this.acc.add(createVector(random(-0.1, 0.1), random(-0.1, 0.1)));
+                
+                this.vel.add(this.acc);
+                this.vel.limit(3); // 限制最高速度
+                this.pos.add(this.vel);
+                this.acc.mult(0); // 重置加速度
+
+                // 邊界循環
+                if (this.pos.x > width) this.pos.x = 0;
+                if (this.pos.x < 0) this.pos.x = width;
+                if (this.pos.y > height) this.pos.y = 0;
+                if (this.pos.y < 0) this.pos.y = height;
+            }
+
+            display() {
+                noStroke();
+                fill(this.color);
+                ellipse(this.pos.x, this.pos.y, this.size);
+            }
+        }
+
+        /* =========================================
+           2. 碧華國小 - 20場景劇本資料
+           ========================================= */
+        const storyData = {
+            1: {
+                text: "凌晨12點，你站在碧華國小的正門口。校園裡一片死寂，只有微弱的路燈照亮著生鏽的鐵門。你聽說這裡晚上會傳出鋼琴聲...",
+                choices: [
+                    { text: "翻牆進入校園", next: 2 },
+                    { text: "去旁邊的警衛室看看", next: 3 }
+                ]
+            },
+            2: {
+                text: "你成功翻過鐵門落在前庭。不遠處的司令台在月光下顯得異常巨大，突然，你聽到了一樓走廊傳來輕微的腳步聲。",
+                choices: [
+                    { text: "往司令台躲藏", next: 4 },
+                    { text: "循著腳步聲往一樓走廊去", next: 5 }
+                ]
+            },
+            3: {
+                text: "警衛室的門半掩著，裡面沒有人，但桌上的對講機卻一直發出「沙沙」的雜音。突然，雜音中夾雜著一句：「你...為什麼要進來...」",
+                choices: [
+                    { text: "嚇壞了，趕緊跑向操場", next: 6 },
+                    { text: "拿起對講機回應", next: 7 }
+                ]
+            },
+            4: {
+                text: "你躲在司令台後方，屏住呼吸。那個腳步聲慢慢靠近，然後停在司令台前。你看到一個沒有影子的孩童輪廓。",
+                choices: [
+                    { text: "閉上眼睛裝死", next: 8 },
+                    { text: "猛然衝向操場", next: 6 }
+                ]
+            },
+            5: {
+                text: "走廊兩側的教室黑漆漆的。走到一年級教室外時，你發現窗戶上印著密密麻麻的手印，而且全都是從內部拍打的痕跡。",
+                choices: [
+                    { text: "推開教室的門", next: 9 },
+                    { text: "趕快走到一樓側邊的樓梯間", next: 10 }
+                ]
+            },
+            6: {
+                text: "你跑到操場上，鞦韆在沒有風的情況下劇烈搖晃。遠處的體育器材室半開著門，裡面透出詭異的紅光。",
+                choices: [
+                    { text: "進入體育器材室調查", next: 11 },
+                    { text: "繞過操場，走向後棟大樓的樓梯", next: 10 }
+                ]
+            },
+            7: {
+                text: "你拿起對講機：「喂？」對講機那頭沉默了兩秒，接著傳來尖銳刺耳的尖叫聲。警衛室的燈泡瞬間爆裂！",
+                choices: [
+                    { text: "衝出警衛室，往一樓廁所躲", next: 12 },
+                    { text: "衝向一樓走廊", next: 5 }
+                ]
+            },
+            8: {
+                text: "你閉上眼，感覺一陣冰冷刺骨的風吹過你的臉頰。當你再次睜開眼時，那個輪廓不見了，但在你腳邊留下了一把生鏽的銅鑰匙。",
+                choices: [
+                    { text: "撿起鑰匙，前往樓梯間", next: 10 },
+                    { text: "不理會，直接前往操場", next: 6 }
+                ]
+            },
+            9: {
+                text: "門「嘎吱」一聲開了。教室裡的課桌椅全部被堆疊在正中央，像一座祭壇。黑板上用紅色粉筆寫著：「找...到...你...了」。",
+                choices: [
+                    { text: "立刻逃出教室，往二樓跑", next: 13 },
+                    { text: "仔細觀察桌椅堆", next: 14 }
+                ]
+            },
+            10: {
+                text: "樓梯間異常潮濕，牆壁上滲出暗褐色的水滴。你踩著台階往上走，卻覺得身後似乎有人跟著你，步伐與你完全一致。",
+                choices: [
+                    { text: "猛然回頭", next: 15 },
+                    { text: "加快腳步衝上二樓", next: 13 }
+                ]
+            },
+            11: {
+                text: "體育器材室裡瀰漫著腐朽的味道。紅光來自一顆躲避球，它正微微發亮，並且...朝著你滾了過來。",
+                choices: [
+                    { text: "踢開球，跑向二樓", next: 13 },
+                    { text: "抱起那顆球", next: 16 }
+                ]
+            },
+            12: {
+                text: "你躲進了一樓的男廁，把自己反鎖在最後一間。此時，外面傳來了沖水聲...接著是隔壁間門板被緩慢推開的聲音。",
+                choices: [
+                    { text: "從門縫偷看", next: 17 },
+                    { text: "用力踹開門逃跑", next: 10 }
+                ]
+            },
+            13: {
+                text: "你來到了二樓走廊。右邊是圖書館，左邊是音樂教室。此時，你清楚地聽到了音樂教室傳來《給愛麗絲》的琴聲...",
+                choices: [
+                    { text: "進入圖書館避難", next: 18 },
+                    { text: "前往音樂教室查看", next: 19 }
+                ]
+            },
+            14: {
+                text: "【壞結局】你靠近桌椅堆，一隻蒼白的手突然從縫隙中伸出，緊緊抓住你的腳踝。你被拖進了黑暗之中，再也沒人見過你。",
+                choices: [ { text: "重新開始", next: 1 } ]
+            },
+            15: {
+                text: "【壞結局】你猛然回頭，一張沒有五官的臉幾乎貼在你的鼻尖上。你嚇得心臟驟停，永遠留在了樓梯間。",
+                choices: [ { text: "重新開始", next: 1 } ]
+            },
+            16: {
+                text: "【壞結局】你抱起那顆球，才發現那根本不是球，而是一顆佈滿血絲的頭顱。頭顱突然睜開眼，對你露出微笑...",
+                choices: [ { text: "重新開始", next: 1 } ]
+            },
+            17: {
+                text: "【壞結局】你從門縫偷看，剛好對上一隻充滿血絲的巨大眼球。廁所門瞬間被巨大的力量粉碎...",
+                choices: [ { text: "重新開始", next: 1 } ]
+            },
+            18: {
+                text: "圖書館的門沒有鎖。你走進去，一排排書架在黑暗中像迷宮一樣。突然，所有的書本開始瘋狂從架上掉落！",
+                choices: [
+                    { text: "抱頭往深處的安全門跑", next: 20 },
+                    { text: "退回走廊", next: 13 }
+                ]
+            },
+            19: {
+                text: "音樂教室裡，一架殘破的鋼琴正自己彈奏著。鋼琴蓋上放著一本積滿灰塵的點名表。琴聲突然停止，空蕩的教室響起了你的名字。",
+                choices: [
+                    { text: "撕毀點名表", next: 20 },
+                    { text: "回答「有」", next: 14 } /* 共用壞結局 */
+                ]
+            },
+            20: {
+                text: "【真結局 - 逃出生天】你奮力撞開了走廊盡頭的逃生門，一陣冷風吹來，你發現自己跌坐在校園外的馬路上。早晨的陽光刺眼地照在你身上。碧華國小的怪談，你活著見證了。",
+                choices: [
+                    { text: "再玩一次", next: 1 }
+                ]
+            }
+        };
+
+        /* =========================================
+           3. 遊戲邏輯與 TTS (語音合成) 控制
+           ========================================= */
+        const storyTextEl = document.getElementById("story-text");
+        const choicesContainer = document.getElementById("choices-container");
+        const speedSlider = document.getElementById("speed-slider");
+        const speedValue = document.getElementById("speed-value");
+        const synth = window.speechSynthesis;
+        let currentVoice = null;
+
+        // 更新語速顯示
+        speedSlider.addEventListener('input', function() {
+            speedValue.innerText = this.value + "x";
+        });
+
+        // 啟動遊戲
+        document.getElementById("start-btn").addEventListener("click", () => {
+            document.getElementById("start-screen").style.display = "none";
+            document.getElementById("game-container").style.display = "block";
+            document.getElementById("tts-controls").style.display = "flex";
+            
+            // 嘗試設定中文語音
+            setTimeout(() => {
+                const voices = synth.getVoices();
+                currentVoice = voices.find(voice => voice.lang.includes('zh') || voice.lang.includes('TW'));
+                renderScene(1);
+            }, 100); // 延遲一下讓瀏覽器載入語音包
+        });
+
+        // 確保語音列表有載入
+        speechSynthesis.onvoiceschanged = () => {
+            const voices = synth.getVoices();
+            currentVoice = voices.find(voice => voice.lang.includes('zh') || voice.lang.includes('TW'));
+        };
+
+        // 朗讀文字
+        function speakText(text) {
+            // 先取消上一個還沒念完的
+            synth.cancel();
+            
+            if (text === "") return;
+
+            const utterThis = new SpeechSynthesisUtterance(text);
+            if (currentVoice) {
+                utterThis.voice = currentVoice;
+            }
+            // 取得拉桿上的語速
+            utterThis.rate = parseFloat(speedSlider.value);
+            // 將音調稍微調低，增加恐怖感
+            utterThis.pitch = 0.6; 
+
+            synth.speak(utterThis);
+        }
+
+        // 渲染場景
+        function renderScene(sceneId) {
+            const scene = storyData[sceneId];
+            
+            // 顯示文字
+            storyTextEl.innerText = scene.text;
+            
+            // 觸發語音朗讀
+            speakText(scene.text);
+
+            // 清空並生成選項按鈕
+            choicesContainer.innerHTML = "";
+            scene.choices.forEach(choice => {
+                const btn = document.createElement("button");
+                btn.classList.add("choice-btn");
+                btn.innerText = choice.text;
+                btn.addEventListener("click", () => {
+                    renderScene(choice.next);
+                });
+                choicesContainer.appendChild(btn);
+            });
+        }
+    </script>
+</body>
+</html>
